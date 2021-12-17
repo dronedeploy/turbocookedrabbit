@@ -197,6 +197,20 @@ func (cp *ConnectionPool) GetChannelFromPool() *ChannelHost {
 	return <-cp.channels
 }
 
+// GetChannelFromPoolV2 gets a cached ackable channel from the Pool if they exist or creates a channel with timeout check
+// A non-acked channel is always a transient channel.
+// Blocking if Ackable is true and the cache is empty.
+// If you want a transient Ackable channel (un-managed), use CreateChannel directly.
+// Error will be thrown if there is no channel available
+func (cp *ConnectionPool) GetChannelFromPoolWithTimeout(timeout time.Duration) (err error, chanHost *ChannelHost) {
+	select {
+	case <-time.After(timeout):
+		return errors.New("No channel avaiable and timeout reached"), nil
+	case chanHost := <-cp.channels:
+		return nil, chanHost
+	}
+}
+
 // ReturnChannel returns a Channel.
 // If Channel is not a cached channel, it is simply closed here.
 // If Cache Channel, we check if erred, new Channel is created instead and then returned to the cache.

@@ -198,19 +198,30 @@ func (pub *Publisher) PublishWithConfirmationV2(letter *Letter, timeout time.Dur
 
 	timeoutAfter := time.After(timeout)
 
+	//var chanHost *ChannelHost
+
 	for {
 		select {
 		case <-timeoutAfter:
-			pub.publishReceipt(letter, fmt.Errorf("publish confirmation for LetterId: %d not able get channel in in a timely manner - recommend retry/requeue", letter.LetterID))
+			pub.publishReceipt(letter, fmt.Errorf("publish confirmation for LetterId: %d not able to publish message in a timely manner - recommend retry/requeue", letter.LetterID))
+
 			return
 		default:
 		}
 
 		// Has to use an Ackable channel for Publish Confirmations.
-		chanHost := pub.ConnectionPool.GetChannelFromPool()
+		err, chanHost := pub.ConnectionPool.GetChannelFromPoolWithTimeout(timeout)
+		if err != nil {
+			errorHandler(err)
+
+			pub.publishReceipt(letter, fmt.Errorf("publish confirmation for LetterId: %d failed to get channel - recommend retry/requeue", letter.LetterID))
+
+			return
+		}
+
 		chanHost.FlushConfirms() // Flush all previous publish confirmations
 
-		err := chanHost.Channel.Publish(
+		publishErr := chanHost.Channel.Publish(
 			letter.Envelope.Exchange,
 			letter.Envelope.RoutingKey,
 			letter.Envelope.Mandatory,
@@ -224,8 +235,8 @@ func (pub *Publisher) PublishWithConfirmationV2(letter *Letter, timeout time.Dur
 			},
 		)
 
-		if err != nil {
-			errorHandler(err)
+		if publishErr != nil {
+			errorHandler(publishErr)
 
 			pub.ConnectionPool.ReturnChannel(chanHost, true)
 			continue // Take it again! From the top!
