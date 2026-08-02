@@ -6,12 +6,8 @@ import (
 	"time"
 )
 
-// Test_forwardError_doesNotLeakGoroutines reproduces the second EAI-1172 leak:
-// forwardError used to spawn "go func() { cp.errors <- err }()" - a goroutine
-// that blocks forever if nobody reads Errors() (cp.errors was unbuffered, and
-// none of stormie's code reads ConnectionPool.Errors()). Every pool-level
-// error (connection dial failures, cache-channel recreation failures, etc.)
-// leaked one goroutine, permanently.
+// forwardError must not leak a goroutine per call when nobody reads
+// Errors() (EAI-1172) - it used to block forever on an unbuffered send.
 func Test_forwardError_doesNotLeakGoroutines(t *testing.T) {
 	cp := &ConnectionPool{errors: make(chan error, 100)}
 
@@ -22,8 +18,7 @@ func Test_forwardError_doesNotLeakGoroutines(t *testing.T) {
 		cp.forwardError(errTest)
 	}
 
-	// Give any (buggy) leaked goroutines a moment to have been scheduled and
-	// parked on the blocking send, then confirm none are still alive.
+	// let any leaked goroutines get scheduled before checking
 	time.Sleep(50 * time.Millisecond)
 	runtime.GC()
 	after := runtime.NumGoroutine()

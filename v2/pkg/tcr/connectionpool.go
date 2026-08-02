@@ -26,8 +26,7 @@ type ConnectionPool struct {
 }
 
 func (cp *ConnectionPool) forwardError(err error) {
-	// Non-blocking: if nobody is reading Errors(), a blocking send here would
-	// leak this goroutine forever (EAI-1172). Drop the error rather than leak.
+	// Non-blocking: a blocking send would leak forever if nobody reads Errors().
 	select {
 	case cp.errors <- err:
 	default:

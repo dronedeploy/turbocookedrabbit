@@ -255,10 +255,8 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 		select {
 		case delivery, ok := <-deliveryChan: // all buffered deliveries are wiped on a channel close error
 			if !ok {
-				// The delivery channel is closed when RabbitMQ drops the connection. A closed
-				// channel receive never blocks, so without this check we'd spin manufacturing
-				// zero-value deliveries at CPU speed forever (EAI-1172). Return so the caller
-				// redials a fresh channel instead.
+				// A closed channel receive never blocks, so without this check we'd
+				// spin manufacturing zero-value deliveries forever. Redial instead.
 				con.ConnectionPool.ReturnChannel(chanHost, true)
 				con.errors <- errors.New("consumer's delivery channel closed")
 				return false
