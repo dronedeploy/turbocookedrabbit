@@ -26,7 +26,12 @@ type ConnectionPool struct {
 }
 
 func (cp *ConnectionPool) forwardError(err error) {
-	go func() { cp.errors <- err }()
+	// Non-blocking: if nobody is reading Errors(), a blocking send here would
+	// leak this goroutine forever (EAI-1172). Drop the error rather than leak.
+	select {
+	case cp.errors <- err:
+	default:
+	}
 }
 
 // Errors yields all the internal errors for connection pool.
@@ -55,7 +60,7 @@ func NewConnectionPool(config *PoolConfig) (*ConnectionPool, error) {
 		poolRWLock:           &sync.RWMutex{},
 		flaggedConnections:   make(map[uint64]bool),
 		sleepOnErrorInterval: time.Duration(config.SleepOnErrorInterval) * time.Millisecond,
-		errors:               make(chan error),
+		errors:               make(chan error, 100),
 	}
 
 	if ok := cp.initializeConnections(); !ok {
