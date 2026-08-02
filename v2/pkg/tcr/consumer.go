@@ -253,7 +253,14 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 
 		// Convert amqp.Delivery into our internal struct for later use.
 		select {
-		case delivery := <-deliveryChan: // all buffered deliveries are wiped on a channel close error
+		case delivery, ok := <-deliveryChan: // all buffered deliveries are wiped on a channel close error
+			if !ok {
+				// A closed channel receive never blocks, so without this check we'd
+				// spin manufacturing zero-value deliveries forever. Redial instead.
+				con.ConnectionPool.ReturnChannel(chanHost, true)
+				con.errors <- errors.New("consumer's delivery channel closed")
+				return false
+			}
 
 			msg, _ := NewMessageFromDelivery(!con.autoAck, chanHost.Channel, &delivery)
 
